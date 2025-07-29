@@ -137,11 +137,12 @@ int main() {
                 append_to_file(current_path);
             }
         } else if (choice == 3) {
+            char dir_path[PATH_MAX];
             int shift;
-            if (scanf("%d", &shift) != 1) {
+            if (scanf("%259s", dir_path) != 1 || scanf("%d", &shift) != 1) {
                 printf("n/a\n");
             } else {
-                process_directory("src", shift);
+                process_directory(dir_path, shift);
             }
         } else {
             printf("n/a\n");
