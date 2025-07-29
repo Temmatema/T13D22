@@ -1,192 +1,150 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <limits.h>
 #include <string.h>
+#include <limits.h>
 #include <dirent.h>
-#include <ctype.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
-int caesar_encrypt_file(const char *filename, int shift) {
-    FILE *file = fopen(filename, "r");
-    if (!file) return 0;
+#define MAX_INPUT 1024
 
-    fseek(file, 0, SEEK_END);
-    long len = ftell(file);
-    rewind(file);
+char current_path[PATH_MAX] = "";
 
-    char *buffer = malloc(len + 1);
-    if (!buffer) {
-        fclose(file);
-        return 0;
+void print_file(const char *path) {
+    FILE *file = fopen(path, "r");
+    if (!file) {
+        printf("n/a\n");
+        return;
+    }
+    int ch;
+    while ((ch = fgetc(file)) != EOF) {
+        putchar(ch);
+    }
+    fclose(file);
+    printf("\n");
+}
+
+void append_to_file(const char *path) {
+    FILE *file = fopen(path, "a");
+    if (!file) {
+        printf("n/a\n");
+        return;
     }
 
-    fread(buffer, 1, len, file);
-    buffer[len] = '\0';
+    char buffer[MAX_INPUT];
+    getchar();
+    if (!fgets(buffer, MAX_INPUT, stdin)) {
+        printf("n/a\n");
+        fclose(file);
+        return;
+    }
+
+    size_t len = strlen(buffer);
+
+    fprintf(file, "\n%s", buffer);
     fclose(file);
 
-    for (long i = 0; i < len; ++i) {
-        if (isprint(buffer[i])) {
-            buffer[i] = (char)(((buffer[i] - 32 + shift) % 95) + 32);
+    print_file(path);
+}
+
+void caesar_encrypt_file(const char *path, int shift) {
+    FILE *file = fopen(path, "r");
+    if (!file) return;
+
+    fseek(file, 0, SEEK_END);
+    long size = ftell(file);
+    rewind(file);
+
+    char *content = malloc(size + 1);
+    if (!content) {
+        fclose(file);
+        return;
+    }
+    fread(content, 1, size, file);
+    content[size] = '\0';
+    fclose(file);
+
+    for (long i = 0; i < size; ++i) {
+        if ((content[i] >= 'A' && content[i] <= 'Z') || (content[i] >= 'a' && content[i] <= 'z')) {
+            char base = (content[i] >= 'a') ? 'a' : 'A';
+            content[i] = (content[i] - base + shift) % 26 + base;
         }
     }
 
-    file = fopen(filename, "w");
+    file = fopen(path, "w");
     if (!file) {
-        free(buffer);
-        return 0;
+        free(content);
+        return;
     }
-
-    fwrite(buffer, 1, len, file);
+    fwrite(content, 1, size, file);
     fclose(file);
-    free(buffer);
-    return 1;
-}
-
-int clear_header_file(const char *filename) {
-    FILE *file = fopen(filename, "w");
-    if (!file) return 0;
-    fclose(file);
-    return 1;
+    free(content);
 }
 
 void process_directory(const char *dir_path, int shift) {
     DIR *dir = opendir(dir_path);
     if (!dir) {
-        printf("n/a\n\n");
+        printf("n/a\n");
         return;
     }
 
     struct dirent *entry;
-    char fullpath[PATH_MAX];
+    struct stat st;
+    char full_path[PATH_MAX];
 
     while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_type != DT_REG) continue;
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
 
-        const char *name = entry->d_name;
-        size_t len = strlen(name);
+        snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, entry->d_name);
 
-        snprintf(fullpath, PATH_MAX, "%s/%s", dir_path, name);
+        if (stat(full_path, &st) == -1)
+            continue;
 
-        if (len > 2 && strcmp(name + len - 2, ".c") == 0) {
-            if (!caesar_encrypt_file(fullpath, shift)) {
-                printf("n/a\n\n");
-                closedir(dir);
-                return;
-            }
-        } else if (len > 2 && strcmp(name + len - 2, ".h") == 0) {
-            if (!clear_header_file(fullpath)) {
-                printf("n/a\n\n");
-                closedir(dir);
-                return;
+        if (S_ISREG(st.st_mode)) {
+            if (strstr(entry->d_name, ".c")) {
+                caesar_encrypt_file(full_path, shift);
+            } else if (strstr(entry->d_name, ".h")) {
+                FILE *file = fopen(full_path, "w");
+                if (file) fclose(file);
             }
         }
     }
-
     closedir(dir);
 }
 
 int main() {
     int choice;
-    char path[PATH_MAX] = "";
-    int file_loaded = 0;
 
     while (1) {
         if (scanf("%d", &choice) != 1) {
             printf("n/a\n");
-            return 0;
+            break;
         }
 
-        getchar();
-
         if (choice == -1) {
-            return 0;
+            break;
         } else if (choice == 1) {
-            if (scanf("%s", path) != 1) {
-                printf("n/a\n\n");
-                continue;
-            }
-
-            FILE *file = fopen(path, "r");
-            if (file == NULL) {
-                printf("n/a\n\n");
-                continue;
-            }
-
-            int ch, isEmpty = 1;
-            while ((ch = fgetc(file)) != EOF) {
-                putchar(ch);
-                isEmpty = 0;
-            }
-            fclose(file);
-
-            if (isEmpty) {
-                printf("n/a");
+            if (scanf("%259s", current_path) != 1) {
+                printf("n/a\n");
             } else {
-                file_loaded = 1;
+                print_file(current_path);
             }
-
-            printf("\n\n");
-
         } else if (choice == 2) {
-            if (!file_loaded) {
-                printf("n/a\n\n");
-                continue;
+            if (strlen(current_path) == 0) {
+                printf("n/a\n");
+            } else {
+                append_to_file(current_path);
             }
-
-            char buffer[1024];
-            if (fgets(buffer, sizeof(buffer), stdin) == NULL) {
-                printf("n/a\n\n");
-                continue;
-            }
-
-            buffer[strcspn(buffer, "\n")] = '\0';
-
-            FILE *file = fopen(path, "a");
-            if (!file) {
-                printf("n/a\n\n");
-                continue;
-            }
-
-            fprintf(file, "%s\n", buffer);
-            fclose(file);
-
-            file = fopen(path, "r");
-            if (!file) {
-                printf("n/a\n\n");
-                continue;
-            }
-
-            int ch, isEmpty = 1;
-            while ((ch = fgetc(file)) != EOF) {
-                putchar(ch);
-                isEmpty = 0;
-            }
-            fclose(file);
-
-            if (isEmpty) {
-                printf("n/a");
-            }
-
-            printf("\n\n");
-
         } else if (choice == 3) {
-            char dir[PATH_MAX];
             int shift;
-
-            if (scanf("%s", dir) != 1) {
-                printf("n/a\n\n");
-                continue;
-            }
-
             if (scanf("%d", &shift) != 1) {
-                printf("n/a\n\n");
-                continue;
+                printf("n/a\n");
+            } else {
+                process_directory("src", shift);
             }
-
-            getchar();
-            process_directory(dir, shift);
-
         } else {
-            printf("n/a\n\n");
+            printf("n/a\n");
         }
     }
 
